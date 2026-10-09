@@ -30,7 +30,7 @@ La tabla `items` se crea (y migra, si venía de una versión anterior) sola al i
 psql "$DATABASE_URL" -f seed.sql
 ```
 
-Variables: `DATABASE_URL` (obligatoria), `PORT` (default 3000), `PGSSL=disable|require` (opcional; por defecto sin SSL para `localhost` y `*.railway.internal`, con SSL en el resto).
+Variables: `DATABASE_URL` (obligatoria), `PORT` (default 3000), `PGSSL=disable|require` (opcional; por defecto sin SSL para `localhost` y `*.railway.internal`, con SSL en el resto), `ANTHROPIC_API_KEY` y `ASK_MODEL` (opcionales, ver [Preguntar al catálogo](#preguntar-al-catálogo)).
 
 ## Deploy en Railway
 
@@ -48,6 +48,18 @@ Una sola vez después del primer deploy: pegar el contenido de `seed.sql` en la 
 ```bash
 psql "$DATABASE_PUBLIC_URL" -f seed.sql
 ```
+
+## Preguntar al catálogo
+
+La web incluye un cuadro "Preguntar al catálogo": una pregunta en lenguaje natural (por ejemplo "¿qué servicios siguen en Java 8?") que se responde con Claude, basándose solo en los ítems del catálogo. Cada ítem mencionado en la respuesta es un botón que lo abre en la lista.
+
+- `ANTHROPIC_API_KEY`: clave de la API de Anthropic. Sin ella el cuadro se oculta y `POST /api/ask` responde 503. En Railway se define como variable del servicio de la app.
+- `ASK_MODEL`: modelo a usar (default `claude-opus-5-5`). `claude-haiku-5-5` es una opción más económica que puede elegir quien administre el deploy.
+- Endpoints: `GET /api/ask/status` devuelve `{ enabled }`; `POST /api/ask` recibe `{ question }` (3 a 500 caracteres) y devuelve `{ answer, items: [{ id, name }] }`.
+- Límites: máximo 10 consultas cada 5 minutos por IP y 200 por hora en total (en memoria; se reinician con cada deploy). Superarlos devuelve 429.
+- Costo: cada consulta envía el catálogo completo (hasta 500 ítems) como contexto, que se cachea entre consultas (prompt caching). El gasto crece con el tamaño del catálogo y la cantidad de consultas.
+
+> **El endpoint es público.** Como el resto de la API, no tiene autenticación: cualquiera con el enlace puede hacer consultas y consumir el crédito de la clave. Conviene usar una clave dedicada con límite de gasto mensual y revisar el consumo.
 
 ## Servidor MCP (Claude Code)
 
@@ -121,7 +133,7 @@ Luego, en Claude Code, dentro del repositorio a catalogar: `/catalog-item` (dete
 
 1. En un repositorio de demo, ejecutar `/catalog-item` en Claude Code, revisar el `catalog-info.yaml` y subirlo.
 2. Ejecutar `npm run ingest` y mostrar el resumen (creados / sin catalogar).
-3. Mostrar el ítem en el catálogo web con la insignia "desde git" (y agregar uno manual desde el formulario).
+3. Mostrar el ítem en el catálogo web con la insignia "desde git" y hacer una pregunta en "Preguntar al catálogo".
 4. En Claude Code, en una carpeta que no tenga ese proyecto clonado: "Necesito <tarea que resuelve el ítem>".
 5. El agente encuentra el ítem vía MCP y explica cómo usarlo.
 

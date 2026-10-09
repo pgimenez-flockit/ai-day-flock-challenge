@@ -2,6 +2,8 @@ import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pool, initSchema } from './db.js';
+import { createAskHandler } from './lib/ask.js';
+import { createRateLimiter } from './lib/rateLimit.js';
 import { TYPES, STATUSES, SOURCES, ValidationError, validateItem, validateStackValue } from './lib/validation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -124,6 +126,28 @@ app.post('/api/items', async (req, res, next) => {
     next(err);
   }
 });
+
+const askHandler = createAskHandler({ pool });
+const askLimiter = createRateLimiter({
+  perIpMax: 10, perIpWindowMs: 5 * 60 * 1000, globalMax: 200, globalWindowMs: 60 * 60 * 1000,
+});
+
+function validateQuestion(req, res, next) {
+  const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
+  if (question.length < 3 || question.length > 500) {
+    return res.status(400).json({ error: 'La pregunta debe tener entre 3 y 500 caracteres.' });
+  }
+  res.locals.question = question;
+  next();
+}
+
+function limitAsk(req, res, next) {
+  if (askLimiter(req.ip)) return next();
+  res.status(429).json({ error: 'Hay muchas consultas en este momento. Intenta de nuevo en unos segundos.' });
+}
+
+app.get('/api/ask/status', askHandler.status);
+app.post('/api/ask', validateQuestion, limitAsk, askHandler.ask);
 
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Recurso no encontrado' }));
 

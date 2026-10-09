@@ -14,7 +14,7 @@
 
 ### In scope
 - List and search catalog items (web UI and API).
-- Create a new catalog item from the UI (manual items).
+- "Preguntar al catálogo": natural-language questions answered by Claude, grounded only on the catalog items (section 6, `POST /api/ask`).
 - Agent-ready items: each item carries enough info to go from "it exists" to "I can use it" (repo, install, usage example).
 - Local MCP server (stdio) exposing `search_catalog` and `get_item`, backed by the deployed API.
 - **Catalog as code:** each repository describes itself in a `catalog-info.yaml`; an ingestor reads those files from GitHub and upserts them.
@@ -24,7 +24,7 @@
 
 ### Out of scope (MVP)
 - Authentication / authorization.
-- Edit and delete from the UI.
+- Creating, editing and deleting items from the UI (`POST /api/items` exists but is not exposed in the UI).
 - Automated tests, CI/CD pipeline.
 - Remote (hosted) MCP server.
 - Semantic search (embeddings / pgvector).
@@ -58,7 +58,8 @@ AI agent ──> MCP server (stdio, local) ──┘
 | MCP server | `@modelcontextprotocol/sdk`, stdio transport, Node `fetch` |
 | Ingestor | Node script, GitHub REST API via `fetch`, `yaml` package for parsing |
 | Hosting | Railway service, deployed from GitHub; `DATABASE_URL` referenced from the Postgres service, `PORT` injected by Railway |
-| Config | API: `DATABASE_URL`, `PORT`. MCP: `CATALOG_API_URL`. Ingestor: `DATABASE_URL`, `GITHUB_OWNER`, `GITHUB_TOKEN` (optional) |
+| Ask feature | `@anthropic-ai/sdk` (Messages API, beta server-side fallbacks), model from `ASK_MODEL` (default `claude-opus-5-5`) |
+| Config | API: `DATABASE_URL`, `PORT`, `ANTHROPIC_API_KEY` (optional), `ASK_MODEL` (optional). MCP: `CATALOG_API_URL`. Ingestor: `DATABASE_URL`, `GITHUB_OWNER`, `GITHUB_TOKEN` (optional) |
 
 ## 5. Data model
 
@@ -108,6 +109,20 @@ JSON fields use camelCase (`repoUrl`, `docsUrl`, `usageExample`, `stack`, `sourc
 - Body: `{ name, type, description, owner, status?, repoUrl?, docsUrl?, install?, usageExample?, tags?, stack? }` (`tags` as string array, `stack` as object, see section 5).
 - Always creates a `MANUAL` item (clients cannot set `source` or `sourceRepo`).
 - Valid → `201` with the created item. Invalid → `400` with `{ error: "<message>" }`.
+- Kept for future/manual integrations (e.g. scripts); it is **not** exposed in the UI.
+
+### `GET /api/ask/status`
+- Returns `200 { enabled: boolean }`; `enabled` is `true` when `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`) is set. Checked at request time. The UI hides the ask box when `false`.
+
+### `POST /api/ask`
+- Body: `{ question }`. `question` must be a string; after trimming it must have 3 to 500 characters, otherwise `400 { error: "La pregunta debe tener entre 3 y 500 caracteres." }`.
+- Rate limit (in memory, per process, by `req.ip`; `trust proxy` is set to 1 because Railway sits behind a proxy): max 10 requests per 5 minutes per IP and 200 per hour globally, otherwise `429`. Invalid questions do not count.
+- Without credentials → `503` ("falta configurar la clave de API") and no call to the API.
+- Loads all items (max 500, `ORDER BY id`), serializes them deterministically into one text block, and calls `client.beta.messages.create` with the model `ASK_MODEL` (default `claude-opus-5-5`), `max_tokens: 2000`, `betas: ['server-side-fallback-2026-07-01']`, `fallbacks: 'default'` and `output_config: { effort: 'low' }`. The `system` prompt has two blocks: the instructions, and the catalog with `cache_control: { type: 'ephemeral' }` (prompt caching). It sends no `thinking`, `temperature`, `top_p` or assistant prefill.
+- The instructions tell the model to answer in neutral Spanish, only from the provided items, never to invent items, versions, commands or URLs, to prefer `ACTIVE` items and warn about `DEPRECATED` ones and legacy stacks (Java < 17, Angular < 16), to keep answers short, and to reference items as `[#<id> <name>]`.
+- `stop_reason` is checked before reading content: `refusal` → `200` with a friendly message and no items. Otherwise the text blocks are joined.
+- Success: `200 { answer: string, items: [{ id, name }] }`; `items` are the existing catalog items referenced in the answer as `[#id ...]`.
+- Errors (SDK typed errors, raw messages never returned, logged with `console.error`): `AuthenticationError` → `503`; `RateLimitError` → `429`; any other `APIError` (including connection errors) → `502`.
 
 ### `GET /health`
 - Returns `200 { status: "ok" }` (used as Railway health check path).
@@ -208,12 +223,14 @@ Single page with:
 3. **Card detail** (expand): the stack (`Stack: Java 21 · Spring Boot 3.2.5`), install and usage example in a monospace block; for git items, the source key as is ("Sincronizado desde owner/repo:dir") and last sync time.
 4. **Origin badge:** git items show a "desde git" badge.
 5. **Stack badges** (not interactive): language badge (`Java 21`, `TypeScript 5.4`) and framework badge (`Spring Boot 3.2` as major.minor; `Angular 18` as major for frameworks versioned by major). Java language version below 17 → warning-style badge with title "Versión de Java legacy"; Java 17 or later → success-style badge; everything else neutral.
-6. **Empty state:** invites the user to add the missing item.
-7. **Create form:** fields from the data model, except `stack` (it comes from git, not from the form); on success the list refreshes, filters reset, and the new item is shown expanded; on error the API message is shown.
+6. **Empty state:** tells the user there are no matches and suggests other terms or asking the owning team.
+7. **"Preguntar al catálogo" box** (above the search bar): a text input, a primary "Preguntar" button and 3 clickable example questions. On submit the button is disabled and shows "Consultando…"; the answer is rendered as text (never as HTML) preserving line breaks, and each `[#id name]` reference becomes a button that clears the filters, expands that item in the list and scrolls to it. API errors are shown inline. The whole box is hidden when `GET /api/ask/status` returns `enabled: false`.
+
+There is no form to create items in the UI: items come from git (`catalog-info.yaml`) or from the API.
 
 User-provided content is rendered as text (no `innerHTML` with raw data).
 
-**UI language:** all user-facing copy is in neutral Spanish (e.g. "Catálogo de Software" with subtitle "Servicios, librerías y aplicaciones reutilizables", "Agregar ítem", "Buscar por nombre, etiqueta, responsable o stack", type labels Servicio / Librería / Herramienta / Funcionalidad, badges "deprecado", "listo para agentes", "desde git"). Code, identifiers, API fields, and enum values stay in English.
+**UI language:** all user-facing copy is in neutral Spanish (e.g. "Catálogo de Software" with subtitle "Servicios, librerías y aplicaciones reutilizables", "Preguntar al catálogo", "Buscar por nombre, etiqueta, responsable o stack", type labels Servicio / Librería / Herramienta / Funcionalidad, badges "deprecado", "listo para agentes", "desde git"). Code, identifiers, API fields, and enum values stay in English.
 
 **Look and feel:** clean, flat, card-based layout; color-coded type badges; "listo para agentes" badge when an item has `install` and `usageExample`; deprecated items dimmed and struck through; light and dark mode support.
 
@@ -227,8 +244,12 @@ User-provided content is rendered as text (no `innerHTML` with raw data).
 - [ ] Opening the deployed URL shows the catalog.
 - [ ] Searching a term present in a tag returns that item.
 - [ ] Filtering by type shows only items of that type.
-- [ ] Creating a valid item shows it in the list immediately and it persists after reload.
-- [ ] Submitting without `name` shows a validation error and creates nothing.
+- [ ] `POST /api/items` with a valid body returns `201` and the item persists after reload; without `name` it returns `400` and creates nothing. The UI has no "add item" button or form.
+- [ ] With `ANTHROPIC_API_KEY` set, the "Preguntar al catálogo" box is visible; without it the box is hidden and `POST /api/ask` returns `503`.
+- [ ] Asking "¿Qué servicios siguen en Java 8?" shows a Spanish answer whose item references are clickable and open that item in the list.
+- [ ] A question shorter than 3 or longer than 500 characters returns `400`; the 11th valid request from one IP within 5 minutes returns `429`.
+- [ ] A model refusal shows a friendly message; upstream auth (`503`), rate-limit (`429`) and other (`502`) errors show a Spanish message without leaking raw error details.
+- [ ] The request to the Claude API has the catalog in a second `system` block with `cache_control`, and no `thinking`, `temperature` or `top_p`.
 - [ ] Data survives a Railway redeploy (stored in Postgres, not on the service filesystem).
 
 ### Catalog as code
@@ -268,6 +289,8 @@ ai-day-flock-challenge/
 ├── server.js                     # Express app: routes, static files
 ├── db.js                         # pg Pool + schema bootstrap/migration
 ├── lib/validation.js             # shared item + stack validation (API + ingestor)
+├── lib/ask.js                    # "Preguntar al catálogo": catalog prompt + Claude call + error mapping
+├── lib/rateLimit.js              # in-memory rate limiter for /api/ask
 ├── mcp/server.js                 # MCP stdio server (adapter over REST API)
 ├── scripts/ingest.js             # git ingestor (npm run ingest)
 ├── scripts/sources/github.js     # GitHub source adapter (repos, tree, nested catalog-info.yaml)
@@ -283,6 +306,7 @@ ai-day-flock-challenge/
 ## 14. Known constraints
 
 - Railway trial: one-time US$5 credit for 30 days; app + Postgres running continuously consume it. Keeping it online afterwards requires the Hobby plan or moving the database (e.g. Neon). Keep "App Sleeping" disabled for the demo.
+- The ask endpoint spends the owner's Anthropic credit and is public: anyone with the link can trigger calls, bounded only by the in-memory rate limits (10 per 5 minutes per IP, 200 per hour). Use a dedicated key with a spend limit; `ASK_MODEL=claude-haiku-5-5` is a cheaper option. Each call sends the whole catalog (max 500 items), cached between calls.
 - Link and API are public: do not store secrets, credentials, internal hostnames, or client-confidential information. **Do not ingest client repositories into the public deploy.**
 - The app must listen on `process.env.PORT`.
 - Each repository costs one tree request plus one request per `catalog-info.yaml`; monorepos consume the unauthenticated limit quickly.
@@ -299,6 +323,5 @@ ai-day-flock-challenge/
 ## 16. Future evolution
 
 1. Semantic search with embeddings in `pgvector`.
-2. "Preguntar" box in the UI: natural-language answers grounded on catalog items.
-3. Freshness: reminders to owners when `last_reviewed_at` is older than 90 days.
-4. Stack inventory report (e.g. all services per Java version) and upgrade-deadline alerts for legacy runtimes.
+2. Freshness: reminders to owners when `last_reviewed_at` is older than 90 days.
+3. Stack inventory report (e.g. all services per Java version) and upgrade-deadline alerts for legacy runtimes.

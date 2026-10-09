@@ -90,8 +90,6 @@
   .brand-divider { width: 1px; align-self: stretch; background: rgba(255, 255, 255, 0.24); }
   h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
   .subtitle { margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.72); }
-  .btn.btn-on-dark { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.4); }
-  .btn.btn-on-dark:hover { background: rgba(255, 255, 255, 0.1); }
 
   button, input, select, textarea { font: inherit; color: inherit; }
   .btn {
@@ -114,8 +112,6 @@
     border-radius: var(--radius); border: 1px solid var(--border-strong);
     background: var(--surface); transition: border-color 0.15s;
   }
-  textarea.field { height: auto; min-height: 72px; padding: 8px 12px; resize: vertical; }
-  .field.mono { font-family: var(--mono); font-size: 13px; }
   .field:hover { border-color: var(--text-3); }
   .field:focus { border-color: var(--brand-orange); outline: none; box-shadow: 0 0 0 3px rgba(255, 81, 2, 0.15); }
 
@@ -180,14 +176,25 @@
   .hint { font-size: 13px; color: var(--text-2); margin: 0 0 10px; }
   .reviewed { font-size: 12px; color: var(--text-3); margin: 0; }
 
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px; }
-  .panel h2 { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
-  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
-  .full { grid-column: 1 / -1; }
-  label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 4px; }
-  .req { color: var(--danger); }
+  .ask { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--brand-orange); border-radius: var(--radius-lg); padding: 16px 18px; margin-bottom: 20px; }
+  .ask[hidden] { display: none; }
+  .ask h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .ask h2 i { color: var(--brand-orange); }
+  .ask-help { margin: 0 0 10px; font-size: 13px; color: var(--text-2); }
+  .ask-row { display: flex; gap: 8px; align-items: flex-start; }
+  .ask-row .field { flex: 1; min-width: 0; }
+  .ask-row .btn { height: 38px; flex-shrink: 0; }
+  .ask .chips { margin-top: 10px; }
+  .ask .chip { font-size: 12.5px; padding: 4px 12px; text-align: left; }
   .error { font-size: 13px; color: var(--danger); margin: 10px 0 0; }
-  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .answer { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .answer-text { margin: 0; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ref {
+    display: inline; padding: 0 6px; border-radius: 6px; border: 1px solid var(--border-strong);
+    background: var(--accent-bg); color: var(--accent-text); font-size: 13px; font-weight: 500; cursor: pointer;
+  }
+  .ref:hover { border-color: var(--brand-orange); }
+  .ref:focus-visible { outline: 2px solid var(--brand-orange); outline-offset: 2px; }
 
   .state {
     text-align: center; padding: 40px 16px; border: 1px dashed var(--border-strong);
@@ -197,17 +204,10 @@
   .state p { margin: 6px 0 0; font-size: 13.5px; }
   .state strong { display: block; margin-top: 8px; color: var(--text); font-weight: 600; font-size: 14.5px; }
 
-  .toast {
-    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius);
-    font-size: 13.5px; opacity: 0; pointer-events: none; transition: opacity 0.2s;
-  }
-  .toast.show { opacity: 1; }
-
   @media (max-width: 600px) {
     .wrap { padding-top: 20px; }
-    .grid { grid-template-columns: minmax(0, 1fr); }
-    .btn-label { display: none; }
+    .ask-row { flex-direction: column; }
+    .ask-row .btn { width: 100%; justify-content: center; }
     .brand-divider, .subtitle { display: none; }
     .logo { height: 22px; }
   }
@@ -224,72 +224,22 @@
         <p class="subtitle">Servicios, librerías y aplicaciones reutilizables</p>
       </div>
     </div>
-    <button class="btn btn-on-dark" id="add-btn" type="button" aria-expanded="false" aria-controls="form-panel">
-      <i class="ti ti-plus" aria-hidden="true"></i><span class="btn-label">Agregar ítem</span>
-    </button>
   </div>
 </header>
 <div class="wrap">
 
-  <section class="panel" id="form-panel" hidden>
-    <h2>Nuevo ítem del catálogo</h2>
-    <form id="item-form" novalidate>
-      <div class="grid">
-        <div>
-          <label for="f-name">Nombre <span class="req">*</span></label>
-          <input class="field" id="f-name" name="name" maxlength="120" placeholder="Validador de CUIT" required>
-        </div>
-        <div>
-          <label for="f-type">Tipo <span class="req">*</span></label>
-          <select class="field" id="f-type" name="type">
-            <option value="SERVICE">Servicio</option>
-            <option value="LIBRARY">Librería</option>
-            <option value="TOOL">Herramienta</option>
-            <option value="FEATURE">Funcionalidad</option>
-          </select>
-        </div>
-        <div class="full">
-          <label for="f-description">Descripción <span class="req">*</span></label>
-          <textarea class="field" id="f-description" name="description" maxlength="1000" placeholder="Qué hace y cuándo conviene usarlo"></textarea>
-        </div>
-        <div>
-          <label for="f-owner">Responsable <span class="req">*</span></label>
-          <input class="field" id="f-owner" name="owner" placeholder="Equipo backend">
-        </div>
-        <div>
-          <label for="f-status">Estado</label>
-          <select class="field" id="f-status" name="status">
-            <option value="ACTIVE">Activo</option>
-            <option value="DEPRECATED">Deprecado</option>
-          </select>
-        </div>
-        <div>
-          <label for="f-repo">Repositorio</label>
-          <input class="field" id="f-repo" name="repoUrl" type="url" placeholder="https://github.com/org/repo">
-        </div>
-        <div>
-          <label for="f-docs">Documentación</label>
-          <input class="field" id="f-docs" name="docsUrl" type="url" placeholder="https://wiki.ejemplo.com/cuit">
-        </div>
-        <div class="full">
-          <label for="f-install">Instalación</label>
-          <input class="field mono" id="f-install" name="install" maxlength="500" placeholder="npm i @equipo/cuit">
-        </div>
-        <div class="full">
-          <label for="f-usage">Ejemplo de uso</label>
-          <textarea class="field mono" id="f-usage" name="usageExample" maxlength="2000" placeholder="validateCuit('20-12345678-9')"></textarea>
-        </div>
-        <div class="full">
-          <label for="f-tags">Etiquetas (separadas por coma)</label>
-          <input class="field" id="f-tags" name="tags" placeholder="validacion, afip, backend">
-        </div>
-      </div>
-      <p class="error" id="form-error" role="alert" hidden></p>
-      <div class="actions">
-        <button class="btn" type="button" id="cancel-btn">Cancelar</button>
-        <button class="btn btn-primary" type="submit" id="save-btn">Guardar ítem</button>
+  <section class="ask" id="ask-box" aria-labelledby="ask-title" hidden>
+    <h2 id="ask-title"><i class="ti ti-sparkles" aria-hidden="true"></i>Preguntar al catálogo</h2>
+    <p class="ask-help">Haz una pregunta en lenguaje natural; la respuesta se basa solo en los ítems del catálogo.</p>
+    <form id="ask-form" novalidate>
+      <div class="ask-row">
+        <input class="field" id="ask-input" maxlength="500" placeholder="¿Qué servicios siguen en Java 8?" aria-label="Pregunta sobre el catálogo" autocomplete="off">
+        <button class="btn btn-primary" type="submit" id="ask-btn">Preguntar</button>
       </div>
     </form>
+    <div class="chips" id="ask-chips" role="group" aria-label="Preguntas de ejemplo"></div>
+    <p class="error" id="ask-error" role="alert" hidden></p>
+    <div class="answer" id="ask-answer" aria-live="polite" hidden></div>
   </section>
 
   <div class="search">
@@ -300,7 +250,6 @@
   <div class="meta-row"><span id="count" aria-live="polite"></span></div>
   <div class="list" id="list"></div>
 </div>
-<div class="toast" id="toast" role="status"></div>
 
 <script>
   const TYPES = { SERVICE: 'Servicio', LIBRARY: 'Librería', TOOL: 'Herramienta', FEATURE: 'Funcionalidad' };
@@ -455,7 +404,7 @@
     lastItems = items;
     $('count').textContent = `${items.length} ${items.length === 1 ? 'ítem' : 'ítems'}`;
     if (!items.length) {
-      renderState('search-off', 'Todavía no hay coincidencias', 'Si ya existe, conviene cargarlo para que otros lo encuentren.');
+      renderState('search-off', 'Todavía no hay coincidencias', 'Prueba con otros términos o consulta al equipo responsable.');
       return;
     }
     $('list').replaceChildren(...items.map(renderCard));
@@ -484,69 +433,98 @@
     debounce = setTimeout(() => { state.q = event.target.value.trim(); load(); }, 300);
   });
 
-  function toggleForm(show) {
-    $('form-panel').hidden = !show;
-    $('add-btn').setAttribute('aria-expanded', String(show));
-    if (show) $('f-name').focus();
-    else { $('item-form').reset(); showError(''); }
-  }
-  function showError(message) {
-    $('form-error').textContent = message;
-    $('form-error').hidden = !message;
-  }
-  function toast(message) {
-    const node = $('toast');
-    node.textContent = message;
-    node.classList.add('show');
-    setTimeout(() => node.classList.remove('show'), 2400);
+  // --- Preguntar al catálogo ---
+  const EXAMPLES = [
+    '¿Qué servicios siguen en Java 8?',
+    '¿Hay alguna librería para autenticación?',
+    '¿Qué templates hay para crear web components?',
+  ];
+  let asking = false;
+
+  function showAskError(message) {
+    $('ask-error').textContent = message;
+    $('ask-error').hidden = !message;
   }
 
-  $('add-btn').addEventListener('click', () => toggleForm($('form-panel').hidden));
-  $('cancel-btn').addEventListener('click', () => toggleForm(false));
-  $('item-form').addEventListener('input', () => showError(''));
+  function openItem(id) {
+    state.q = '';
+    state.type = 'ALL';
+    state.openId = id;
+    $('q').value = '';
+    renderChips();
+    load().then(() => {
+      const card = document.getElementById(`detail-${id}`)?.closest('.card');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
 
-  $('item-form').addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.target));
-    for (const key of Object.keys(data)) data[key] = data[key].trim();
-
-    if (!data.name) return showError('El nombre es obligatorio.');
-    if (!data.description) return showError('La descripción es obligatoria.');
-    if (!data.owner) return showError('El responsable es obligatorio.');
-    for (const [key, label] of [['repoUrl', 'repositorio'], ['docsUrl', 'documentación']]) {
-      if (data[key] && !isSafeUrl(data[key])) return showError(`La URL de ${label} debe empezar con http:// o https://.`);
+  // Model output is only ever inserted as text nodes; [#id name] references become buttons.
+  function renderAnswer(answer, items) {
+    const known = new Set(items.map((i) => i.id));
+    const nodes = [];
+    let last = 0;
+    for (const m of answer.matchAll(/\[#(\d{1,9})\b[^\]]*\]/g)) {
+      const id = Number(m[1]);
+      if (!known.has(id)) continue;
+      nodes.push(answer.slice(last, m.index));
+      nodes.push(el('button', {
+        class: 'ref', type: 'button', title: 'Ver en el catálogo', onclick: () => openItem(id),
+      }, items.find((i) => i.id === id).name));
+      last = m.index + m[0].length;
     }
+    nodes.push(answer.slice(last));
+    $('ask-answer').replaceChildren(el('p', { class: 'answer-text' }, nodes));
+    $('ask-answer').hidden = false;
+  }
 
-    const payload = {
-      name: data.name, type: data.type, description: data.description, owner: data.owner, status: data.status,
-      tags: data.tags ? data.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
-    };
-    for (const key of ['repoUrl', 'docsUrl', 'install', 'usageExample']) if (data[key]) payload[key] = data[key];
-
-    const save = $('save-btn');
-    save.disabled = true;
+  async function submitAsk(question) {
+    question = question.trim();
+    if (asking) return;
+    if (question.length < 3 || question.length > 500) {
+      return showAskError('La pregunta debe tener entre 3 y 500 caracteres.');
+    }
+    asking = true;
+    showAskError('');
+    $('ask-answer').hidden = true;
+    const button = $('ask-btn');
+    button.disabled = true;
+    button.textContent = 'Consultando…';
     try {
-      const res = await fetch('/api/items', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      const res = await fetch('/api/ask', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) return showError(body.error || 'No se pudo guardar el ítem.');
-      toggleForm(false);
-      state.q = '';
-      state.type = 'ALL';
-      $('q').value = '';
-      renderChips();
-      state.openId = body.id;
-      toast('Ítem agregado');
-      await load();
+      if (!res.ok) return showAskError(body.error || 'No se pudo consultar al asistente. Intenta de nuevo.');
+      renderAnswer(String(body.answer || ''), Array.isArray(body.items) ? body.items : []);
     } catch {
-      showError('No se pudo conectar con el servidor. Intenta de nuevo.');
+      showAskError('No se pudo conectar con el servidor. Intenta de nuevo.');
     } finally {
-      save.disabled = false;
+      asking = false;
+      button.disabled = false;
+      button.textContent = 'Preguntar';
     }
-  });
+  }
+
+  function initAsk() {
+    $('ask-chips').replaceChildren(...EXAMPLES.map((text) =>
+      el('button', {
+        class: 'chip', type: 'button',
+        onclick: () => { $('ask-input').value = text; submitAsk(text); },
+      }, text)
+    ));
+    $('ask-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      submitAsk($('ask-input').value);
+    });
+    $('ask-input').addEventListener('input', () => showAskError(''));
+    fetch('/api/ask/status')
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((body) => { $('ask-box').hidden = !body.enabled; })
+      .catch(() => {});
+  }
 
   renderChips();
+  initAsk();
   load();
 </script>
 </body>

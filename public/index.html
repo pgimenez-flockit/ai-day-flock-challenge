@@ -3,25 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Catálogo del equipo</title>
+<title>Catálogo de Software</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
 <style>
   :root {
-    --bg: #f7f7f5;
+    --brand-night: #1c002c;
+    --brand-orange: #ff5102;
+    --bg: #f7f5fa;
     --surface: #ffffff;
-    --surface-alt: #f1f0ec;
-    --text: #1f1e1c;
-    --text-2: #5f5e5a;
-    --text-3: #8a8983;
-    --border: rgba(31, 30, 28, 0.12);
-    --border-strong: rgba(31, 30, 28, 0.24);
-    --accent: #185fa5;
-    --accent-hover: #0c447c;
-    --accent-bg: #e6f1fb;
-    --accent-text: #0c447c;
+    --surface-alt: #efebf3;
+    --text: #1c002c;
+    --text-2: #5e4e6b;
+    --text-3: #8b7f96;
+    --border: rgba(28, 0, 44, 0.10);
+    --border-strong: rgba(28, 0, 44, 0.22);
+    --accent: #1c002c;
+    --accent-hover: #3a1a4f;
+    --accent-bg: #fff0e8;
+    --accent-text: #b33a00;
+    --link: #c2410c;
     --danger: #a32d2d;
     --warning-bg: #faeeda;
     --warning-text: #854f0b;
@@ -31,26 +34,27 @@
     --t-library-bg: #e1f5ee; --t-library-fg: #085041;
     --t-tool-bg: #faece7;    --t-tool-fg: #712b13;
     --t-feature-bg: #fbeaf0; --t-feature-fg: #72243e;
-    --b-git-bg: #e8e7e2; --b-git-fg: #4a4944;
+    --b-git-bg: #ece7f1; --b-git-fg: #4b3a5a;
     --radius: 8px;
     --radius-lg: 12px;
-    --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
     --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #1a1a19;
-      --surface: #242423;
-      --surface-alt: #2c2c2a;
-      --text: #f1efe8;
-      --text-2: #b4b2a9;
-      --text-3: #888780;
-      --border: rgba(241, 239, 232, 0.12);
-      --border-strong: rgba(241, 239, 232, 0.24);
-      --accent: #378add;
-      --accent-hover: #85b7eb;
-      --accent-bg: #0c447c;
-      --accent-text: #b5d4f4;
+      --bg: #12001d;
+      --surface: #1e0a2b;
+      --surface-alt: #2a1638;
+      --text: #f4eff8;
+      --text-2: #c3b6ce;
+      --text-3: #8f7f9c;
+      --border: rgba(244, 239, 248, 0.12);
+      --border-strong: rgba(244, 239, 248, 0.24);
+      --accent: #ff5102;
+      --accent-hover: #ff7433;
+      --accent-bg: #4a1a05;
+      --accent-text: #ffb08a;
+      --link: #ff8a52;
       --danger: #f09595;
       --warning-bg: #633806;
       --warning-text: #fac775;
@@ -60,7 +64,7 @@
       --t-library-bg: #085041; --t-library-fg: #9fe1cb;
       --t-tool-bg: #712b13;    --t-tool-fg: #f5c4b3;
       --t-feature-bg: #72243e; --t-feature-fg: #f4c0d1;
-      --b-git-bg: #3a3a37; --b-git-fg: #d3d1c7;
+      --b-git-bg: #33204a; --b-git-fg: #d9cce4;
     }
   }
 
@@ -74,17 +78,20 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 32px 16px 64px; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 28px 16px 64px; }
 
-  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .logo {
-    width: 40px; height: 40px; border-radius: 10px;
-    background: var(--accent-bg); color: var(--accent-text);
-    display: grid; place-items: center; font-size: 22px; flex-shrink: 0;
+  .topbar { background: var(--brand-night); color: #fff; border-bottom: 3px solid var(--brand-orange); }
+  .topbar-inner {
+    max-width: 820px; margin: 0 auto; padding: 18px 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
   }
-  h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
-  .subtitle { margin: 0; font-size: 13px; color: var(--text-2); }
+  .brand { display: flex; align-items: center; gap: 16px; min-width: 0; }
+  .logo { height: 28px; width: auto; display: block; flex-shrink: 0; }
+  .brand-divider { width: 1px; align-self: stretch; background: rgba(255, 255, 255, 0.24); }
+  h1 { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
+  .subtitle { margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.72); }
+  .btn.btn-on-dark { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+  .btn.btn-on-dark:hover { background: rgba(255, 255, 255, 0.1); }
 
   button, input, select, textarea { font: inherit; color: inherit; }
   .btn {
@@ -99,7 +106,7 @@
   .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
   .btn:disabled { opacity: 0.6; cursor: progress; }
   .btn:focus-visible, .field:focus-visible, .chip:focus-visible, .card-toggle:focus-visible {
-    outline: 2px solid var(--accent); outline-offset: 2px;
+    outline: 2px solid var(--brand-orange); outline-offset: 2px;
   }
 
   .field {
@@ -110,7 +117,7 @@
   textarea.field { height: auto; min-height: 72px; padding: 8px 12px; resize: vertical; }
   .field.mono { font-family: var(--mono); font-size: 13px; }
   .field:hover { border-color: var(--text-3); }
-  .field:focus { border-color: var(--accent); outline: none; }
+  .field:focus { border-color: var(--brand-orange); outline: none; box-shadow: 0 0 0 3px rgba(255, 81, 2, 0.15); }
 
   .search { position: relative; margin-bottom: 14px; }
   .search i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-3); font-size: 18px; }
@@ -123,7 +130,7 @@
     color: var(--text-2); cursor: pointer;
   }
   .chip:hover { border-color: var(--text-3); }
-  .chip[aria-pressed="true"] { background: var(--text); border-color: var(--text); color: var(--bg); }
+  .chip[aria-pressed="true"] { background: var(--brand-night); border-color: var(--brand-night); color: #fff; }
 
   .meta-row { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 10px; font-size: 12px; color: var(--text-3); }
   .list { display: grid; gap: 10px; }
@@ -132,7 +139,7 @@
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius-lg); transition: border-color 0.15s;
   }
-  .card:hover { border-color: var(--border-strong); }
+  .card:hover { border-color: var(--border-strong); box-shadow: 0 2px 10px rgba(28, 0, 44, 0.06); }
   .card.deprecated { opacity: 0.72; }
   .card-toggle {
     display: flex; width: 100%; gap: 12px; align-items: flex-start; justify-content: space-between;
@@ -157,6 +164,9 @@
   .b-deprecated { background: var(--warning-bg); color: var(--warning-text); }
   .b-git { background: var(--b-git-bg); color: var(--b-git-fg); }
   .b-agent { background: var(--accent-bg); color: var(--accent-text); }
+  .b-stack { background: var(--surface-alt); color: var(--text-2); border: 1px solid var(--border); }
+  .b-stack-legacy { background: var(--warning-bg); color: var(--warning-text); border: 1px solid transparent; }
+  .b-stack-modern { background: var(--success-bg); color: var(--success-text); border: 1px solid transparent; }
 
   .detail { border-top: 1px solid var(--border); margin: 0 18px; padding: 14px 0 16px; }
   .detail-label { margin: 0 0 4px; font-size: 12px; color: var(--text-3); }
@@ -165,7 +175,7 @@
     background: var(--surface-alt); border-radius: var(--radius); padding: 10px 12px; margin: 0 0 12px;
   }
   .links { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; font-size: 13px; }
-  .links a { color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+  .links a { color: var(--link); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
   .links a:hover { text-decoration: underline; }
   .hint { font-size: 13px; color: var(--text-2); margin: 0 0 10px; }
   .reviewed { font-size: 12px; color: var(--text-3); margin: 0; }
@@ -198,23 +208,28 @@
     .wrap { padding-top: 20px; }
     .grid { grid-template-columns: minmax(0, 1fr); }
     .btn-label { display: none; }
+    .brand-divider, .subtitle { display: none; }
+    .logo { height: 22px; }
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
+<header class="topbar">
+  <div class="topbar-inner">
     <div class="brand">
-      <div class="logo" aria-hidden="true"><i class="ti ti-books"></i></div>
+      <img class="logo" src="brand/flock-isologo-blanco.png" alt="Flock IT" width="109" height="28">
+      <span class="brand-divider" aria-hidden="true"></span>
       <div>
-        <h1>Catálogo del equipo</h1>
-        <p class="subtitle">Lo que ya existe, antes de construirlo de nuevo</p>
+        <h1>Catálogo de Software</h1>
+        <p class="subtitle">Servicios, librerías y aplicaciones reutilizables</p>
       </div>
     </div>
-    <button class="btn" id="add-btn" type="button" aria-expanded="false" aria-controls="form-panel">
+    <button class="btn btn-on-dark" id="add-btn" type="button" aria-expanded="false" aria-controls="form-panel">
       <i class="ti ti-plus" aria-hidden="true"></i><span class="btn-label">Agregar ítem</span>
     </button>
-  </header>
+  </div>
+</header>
+<div class="wrap">
 
   <section class="panel" id="form-panel" hidden>
     <h2>Nuevo ítem del catálogo</h2>
@@ -279,7 +294,7 @@
 
   <div class="search">
     <i class="ti ti-search" aria-hidden="true"></i>
-    <input class="field" id="q" type="search" placeholder="Buscar por nombre, etiqueta o responsable" aria-label="Buscar en el catálogo" autocomplete="off">
+    <input class="field" id="q" type="search" placeholder="Buscar por nombre, etiqueta, responsable o stack (ej. java 8)" aria-label="Buscar en el catálogo" autocomplete="off">
   </div>
   <div class="chips" id="chips" role="group" aria-label="Filtrar por tipo"></div>
   <div class="meta-row"><span id="count" aria-live="polite"></span></div>
@@ -301,7 +316,7 @@
       else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
       else node.setAttribute(key, value);
     }
-    for (const child of children.flat()) {
+    for (const child of children.flat(Infinity)) {
       if (child === null || child === undefined || child === false) continue;
       node.append(child instanceof Node ? child : document.createTextNode(String(child)));
     }
@@ -320,6 +335,51 @@
     if (days < 31) return rtf.format(-days, 'day');
     if (days < 365) return rtf.format(-Math.round(days / 30), 'month');
     return rtf.format(-Math.round(days / 365), 'year');
+  }
+
+  const DISPLAY_NAMES = {
+    javascript: 'JavaScript', typescript: 'TypeScript', nestjs: 'NestJS', nodejs: 'Node.js', dotnet: '.NET',
+    csharp: 'C#', php: 'PHP', sql: 'SQL', vue: 'Vue', nextjs: 'Next.js',
+  };
+  const displayName = (slug) =>
+    DISPLAY_NAMES[slug] || slug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  // Frameworks versioned by major release show only the major in the badge; the rest show major.minor.
+  const MAJOR_ONLY = ['angular', 'react', 'vue', 'svelte', 'nextjs', 'nestjs', 'nuxt'];
+
+  function stackLabel(stack) {
+    const parts = [
+      stack.language && [displayName(stack.language), stack.languageVersion].filter(Boolean).join(' '),
+      stack.framework && [displayName(stack.framework), stack.frameworkVersion].filter(Boolean).join(' '),
+    ].filter(Boolean);
+    return parts.join(' · ');
+  }
+
+  function stackBadges(stack) {
+    if (!stack) return [];
+    const badges = [];
+    if (stack.language) {
+      let cls = 'b-stack';
+      let title;
+      if (stack.language === 'java' && stack.languageVersion) {
+        const major = parseInt(stack.languageVersion, 10);
+        if (major < 17) { cls = 'b-stack-legacy'; title = 'Versión de Java legacy'; }
+        else if (major >= 17) cls = 'b-stack-modern';
+      }
+      badges.push(el('span', { class: `badge ${cls}`, title }, [displayName(stack.language), stack.languageVersion].filter(Boolean).join(' ')));
+    }
+    if (stack.framework) {
+      const parts = (stack.frameworkVersion || '').split('.');
+      const shown = stack.frameworkVersion
+        ? parts.slice(0, MAJOR_ONLY.includes(stack.framework) ? 1 : 2).join('.')
+        : '';
+      let fwCls = 'b-stack';
+      let fwTitle;
+      if (stack.framework === 'angular' && stack.frameworkVersion) {
+        if (parseInt(stack.frameworkVersion, 10) < 16) { fwCls = 'b-stack-legacy'; fwTitle = 'Versión de Angular legacy'; }
+      }
+      badges.push(el('span', { class: `badge ${fwCls}`, title: fwTitle }, [displayName(stack.framework), shown].filter(Boolean).join(' ')));
+    }
+    return badges;
   }
 
   function renderChips() {
@@ -343,6 +403,7 @@
 
     const badges = [
       el('span', { class: `badge t-${item.type}` }, (TYPES[item.type] || item.type).toLowerCase()),
+      stackBadges(item.stack),
       deprecated && el('span', { class: 'badge b-deprecated' }, 'deprecado'),
       item.source === 'GIT' && el('span', { class: 'badge b-git', title: 'Sincronizado desde catalog-info.yaml del repositorio' }, icon('brand-git'), 'desde git'),
       agentReady && el('span', { class: 'badge b-agent', title: 'Tiene instalación y ejemplo de uso' }, icon('robot'), 'listo para agentes'),
@@ -378,6 +439,7 @@
       const synced = item.source === 'GIT' && item.sourceRepo ? relativeReview(item.lastSyncedAt) : null;
       card.append(el('div', { class: 'detail', id: detailId },
         links.length > 0 && el('div', { class: 'links' }, links),
+        item.stack && stackLabel(item.stack) && el('p', { class: 'hint', text: `Stack: ${stackLabel(item.stack)}` }),
         item.install && [el('p', { class: 'detail-label', text: 'Instalación' }), el('pre', { class: 'code', text: item.install })],
         item.usageExample && [el('p', { class: 'detail-label', text: 'Ejemplo de uso' }), el('pre', { class: 'code', text: item.usageExample })],
         !agentReady && el('p', { class: 'hint', text: 'Falta información de instalación o uso. Completarla permite que los agentes lo usen.' }),

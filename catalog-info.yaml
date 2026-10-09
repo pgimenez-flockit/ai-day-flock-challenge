@@ -1,0 +1,12 @@
+apiVersion: catalog/v1
+name: Catálogo del equipo
+type: TOOL
+description: >
+  Catálogo interno de servicios, librerías, herramientas y funcionalidades del equipo,
+  consultable desde la web y por agentes de IA vía MCP. Consultarlo antes de construir
+  algo nuevo para verificar si ya existe.
+owner: Pablo Gimenez
+install: git clone https://github.com/pgimenez-flockit/ai-day-flock-challenge.git && cd ai-day-flock-challenge && npm install
+usageExample: |
+  claude mcp add catalog -e CATALOG_API_URL=https://<app>.up.railway.app -- node <ruta-absoluta>/mcp/server.js
+tags: [catalogo, mcp, agentes, descubrimiento]

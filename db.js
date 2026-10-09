@@ -50,4 +50,7 @@ export async function initSchema() {
       ADD COLUMN IF NOT EXISTS source_repo TEXT UNIQUE,
       ADD COLUMN IF NOT EXISTS last_synced_at TIMESTAMPTZ
   `);
+
+  // Technology stack (language / framework and versions), see SPEC section 5.
+  await pool.query('ALTER TABLE items ADD COLUMN IF NOT EXISTS stack JSONB');
 }

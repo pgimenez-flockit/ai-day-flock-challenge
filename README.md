@@ -1,6 +1,6 @@
-# Catálogo interno
+# Catálogo de Software
 
-Catálogo de servicios, librerías, herramientas y funcionalidades del equipo, consultable por personas (web) y por agentes de IA (servidor MCP). Idea: antes de escribir código, el agente pregunta si ya existe.
+Servicios, librerías y aplicaciones reutilizables. Catálogo de servicios, librerías, herramientas y funcionalidades del equipo, consultable por personas (web) y por agentes de IA (servidor MCP). Idea: antes de escribir código, el agente pregunta si ya existe.
 
 ```
 Repos (catalog-info.yaml) ──> Ingestor ──┐
@@ -58,11 +58,11 @@ claude mcp add catalog -e CATALOG_API_URL=https://<app>.up.railway.app -- node <
 claude mcp list   # catalog debe figurar como conectado
 ```
 
-Herramientas: `search_catalog` (query, type opcional) y `get_item` (id). Los ítems deprecados se marcan explícitamente.
+Herramientas: `search_catalog` (`query` y/o filtros `type`, `language`, `languageVersion`, `framework`; al menos uno) y `get_item` (id). Permite preguntas como "qué servicios siguen en Java 8" (`language=java`, `languageVersion=8`) y muestra el stack de cada ítem. Los ítems deprecados se marcan explícitamente.
 
 ## Catálogo como código
 
-Cada repositorio se describe a sí mismo con un `catalog-info.yaml` en la raíz. El ingestor lee esos archivos desde GitHub y los carga como ítems `GIT` (se muestran con la insignia "desde git").
+Cada repositorio se describe a sí mismo con un `catalog-info.yaml` en la raíz; un monorepo (o un repositorio de ejemplos) puede tener además uno por carpeta de módulo. El ingestor lee esos archivos desde GitHub y los carga como ítems `GIT` (se muestran con la insignia "desde git").
 
 ```yaml
 apiVersion: catalog/v1
@@ -78,9 +78,16 @@ install: npm i @flock/cuit # opcional
 usageExample: |            # opcional
   import { isValidCuit } from '@flock/cuit';
 tags: [validacion, afip]   # opcional
+stack:                     # opcional (todas las claves son opcionales)
+  language: java           # minúsculas
+  languageVersion: "21"    # siempre entre comillas
+  framework: spring-boot
+  frameworkVersion: "3.2.5"
 ```
 
-Un ítem por repositorio. Las claves desconocidas se rechazan y `repoUrl` no se define en el YAML (se toma del repositorio). Los repositorios archivados quedan como `DEPRECATED`.
+Un ítem por cada `catalog-info.yaml`. El de la raíz se identifica como `owner/repo`; los de carpetas internas como `owner/repo:carpeta/modulo`, y su URL apunta a esa carpeta en la rama por defecto. Se ignoran los archivos dentro de `node_modules/` y `dist/`, y se leen hasta 100 por repositorio (si hay más, el resumen lo indica). Las claves desconocidas se rechazan y `repoUrl` no se define en el YAML (se toma del repositorio). Los repositorios archivados dejan todos sus ítems como `DEPRECATED`.
+
+El `stack` permite buscar por tecnología (por ejemplo `java 8` en el buscador, o `language=java&languageVersion=8` en la API) y resalta en la web los servicios con Java anterior a 17. `language` y `framework` van en minúsculas (`^[a-z0-9][a-z0-9.+-]{0,39}$`); las versiones aceptan letras, números, `.`, `+` y `-` (hasta 20 caracteres).
 
 ### Ejecutar el ingestor
 
@@ -93,7 +100,7 @@ npm run ingest
 ```
 
 - Sin `GITHUB_TOKEN` solo ve repositorios públicos (límite de 60 solicitudes/hora). Con token usa un token *fine-grained* de solo lectura: permisos **Contents** y **Metadata** (read-only).
-- El resumen indica creados, actualizados, sin cambios, inválidos (con el motivo), sin catalogar y huérfanos (ítems git cuyo repositorio ya no tiene un YAML válido; no se eliminan solos).
+- El resumen indica creados, actualizados, sin cambios, inválidos (con el motivo), sin catalogar (repositorios sin ningún `catalog-info.yaml`) y huérfanos (ítems git cuyo archivo ya no existe o no es válido; no se eliminan solos). Cada entrada se lista por su clave (`owner/repo` o `owner/repo:carpeta`).
 - Es idempotente: ejecutarlo de nuevo sin cambios no duplica nada. `last_reviewed_at` solo cambia cuando cambia el contenido del YAML.
 - Termina con código 1 solo ante errores fatales (base de datos o GitHub inaccesibles, credenciales inválidas).
 - Para la base de Railway se puede ejecutar desde tu máquina con `DATABASE_URL` apuntando a `DATABASE_PUBLIC_URL`.
@@ -108,7 +115,7 @@ Este repositorio incluye una skill de Claude Code que redacta el `catalog-info.y
 mkdir -p ~/.claude/skills && cp -r .claude/skills/catalog-item ~/.claude/skills/
 ```
 
-Luego, en Claude Code, dentro del repositorio a catalogar: `/catalog-item`. Este repositorio tiene su propio `catalog-info.yaml`.
+Luego, en Claude Code, dentro del repositorio a catalogar: `/catalog-item` (detecta también el `stack` desde `pom.xml` o `package.json`; en un monorepo propone un `catalog-info.yaml` por módulo). Este repositorio tiene su propio `catalog-info.yaml`.
 
 ## Guion de demo
 

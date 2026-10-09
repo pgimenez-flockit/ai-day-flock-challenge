@@ -1,4 +1,4 @@
-# Internal Catalog — MVP Spec
+# Catálogo de Software (internal catalog) — MVP Spec
 
 ## 1. Purpose
 
@@ -77,29 +77,35 @@ Table `items`:
 | `install` | `text` | optional, max 500 chars (e.g. Maven dependency, npm command) |
 | `usage_example` | `text` | optional, max 2000 chars (short snippet) |
 | `tags` | `text[]` | optional, default `{}` |
+| `stack` | `jsonb` | optional, `NULL` when absent. Object with optional string keys `language`, `languageVersion`, `framework`, `frameworkVersion` (see below) |
 | `source` | `text` | `MANUAL` or `GIT`; default `MANUAL` |
-| `source_repo` | `text` | `owner/repo` for git items, `NULL` for manual ones; **unique** |
+| `source_repo` | `text` | source key of git items, `NULL` for manual ones; **unique**. `owner/repo` for the `catalog-info.yaml` at the repository root, `owner/repo:<dir path>` for nested ones (e.g. `acme/samples:policy-service`) |
 | `last_synced_at` | `timestamptz` | set by the ingestor on every sync; `NULL` for manual items |
 | `last_reviewed_at` | `timestamptz` | default `now()`; for git items, updated only when the YAML content changes |
 | `created_at` | `timestamptz` | default `now()` |
 
-Schema bootstrap on startup: `CREATE TABLE IF NOT EXISTS`, then `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for the `source`, `source_repo`, and `last_synced_at` columns, so existing databases migrate in place without data loss.
+**`stack` rules** (shared validation module, used by the API and the ingestor):
+- Must be a plain object when present; unknown keys are rejected; an empty object is stored as `NULL`.
+- `language` and `framework`: lowercase, `^[a-z0-9][a-z0-9.+-]{0,39}$` (e.g. `java`, `typescript`, `spring-boot`, `angular`).
+- `languageVersion` and `frameworkVersion`: strings matching `^[0-9A-Za-z][0-9A-Za-z.+-]{0,19}$` (e.g. `"8"`, `"21"`, `"3.2.5"`). Numbers are rejected (quote them in YAML).
+
+Schema bootstrap on startup: `CREATE TABLE IF NOT EXISTS`, then `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for the `source`, `source_repo`, `last_synced_at`, and `stack` columns, so existing databases migrate in place without data loss.
 
 ## 6. REST API
 
-JSON fields use camelCase (`repoUrl`, `docsUrl`, `usageExample`, `source`, `sourceRepo`, `lastSyncedAt`, `lastReviewedAt`, `createdAt`).
+JSON fields use camelCase (`repoUrl`, `docsUrl`, `usageExample`, `stack`, `source`, `sourceRepo`, `lastSyncedAt`, `lastReviewedAt`, `createdAt`).
 
-### `GET /api/items?q=<text>&type=<TYPE>&status=<STATUS>&source=<SOURCE>`
+### `GET /api/items?q=<text>&type=<TYPE>&status=<STATUS>&source=<SOURCE>&language=<l>&languageVersion=<v>&framework=<f>`
 - Returns `200` with a JSON array of items, ordered by `name` ascending, max 50.
-- `q` (optional): case-insensitive match on `name`, `description`, `owner`, or any tag.
-- `type`, `status`, `source` (optional): exact match.
-- Invalid `type`, `status`, or `source` → `400`.
+- `q` (optional): case-insensitive match on `name`, `description`, `owner`, any tag, or the stack label (`language languageVersion framework frameworkVersion` joined by spaces, so `q=java 8` matches Java 8 but not Java 17).
+- `type`, `status`, `source`, `language`, `languageVersion`, `framework` (optional): exact match.
+- Invalid `type`, `status`, or `source`, or a `language` / `languageVersion` / `framework` that does not match the `stack` rules → `400`.
 
 ### `GET /api/items/:id`
 - Returns `200` with the full item, `404` if not found, `400` if `id` is not an integer.
 
 ### `POST /api/items`
-- Body: `{ name, type, description, owner, status?, repoUrl?, docsUrl?, install?, usageExample?, tags? }` (`tags` as string array).
+- Body: `{ name, type, description, owner, status?, repoUrl?, docsUrl?, install?, usageExample?, tags?, stack? }` (`tags` as string array, `stack` as object, see section 5).
 - Always creates a `MANUAL` item (clients cannot set `source` or `sourceRepo`).
 - Valid → `201` with the created item. Invalid → `400` with `{ error: "<message>" }`.
 
@@ -113,14 +119,14 @@ All SQL uses parameterized queries. No string concatenation of user input. Valid
 Location: `mcp/server.js`. Runs locally over stdio; reads `CATALOG_API_URL` (base URL of the deployed API).
 
 ### Tool `search_catalog`
-- **Description (for the agent):** "Search the team's internal catalog of existing services, libraries, tools and features. Call this BEFORE implementing new functionality to check whether something reusable already exists."
-- **Input:** `{ query: string, type?: "SERVICE" | "TOOL" | "FEATURE" | "LIBRARY" }`
-- **Output:** compact text list (max 10): `id`, `name`, `type`, `status`, one-line description, `owner`.
+- **Description (for the agent):** "Search the team's internal catalog of existing services, libraries, tools and features. Call this BEFORE implementing new functionality to check whether something reusable already exists." plus a note that it can answer inventory questions such as "which services still run on Java 8" by filtering `language=java`, `languageVersion=8`.
+- **Input:** `{ query?: string, type?: "SERVICE" | "TOOL" | "FEATURE" | "LIBRARY", language?: string, languageVersion?: string, framework?: string }`. At least one of `query` or a filter is required; otherwise the tool returns `isError: true` with a clear message.
+- **Output:** compact text list (max 10): `id`, `name`, `type`, `status`, one-line description, `owner`, and the stack when present (e.g. `stack: Java 21 · Spring Boot 3.2.5`).
 
 ### Tool `get_item`
 - **Description (for the agent):** "Get full details of a catalog item, including repository, install instructions and usage example."
 - **Input:** `{ id: number }`
-- **Output:** all item fields as readable text, including source (`git: owner/repo` or `manual`) and last sync.
+- **Output:** all item fields as readable text, including the stack (`Stack: Java 21 · Spring Boot 3.2.5`), source (`git: <source key>`, e.g. `owner/repo` or `owner/repo:dir`, or `manual`) and last sync.
 
 ### Behavior
 - `DEPRECATED` items are flagged explicitly in both tools' output so the agent does not recommend them silently.
@@ -151,11 +157,17 @@ usageExample: |            # optional
   import { isValidCuit } from '@flock/cuit';
   isValidCuit('20-12345678-9');
 tags: [validacion, afip]   # optional
+stack:                     # optional; every key optional, versions always quoted strings
+  language: java
+  languageVersion: "21"
+  framework: spring-boot
+  frameworkVersion: "3.2.5"
 ```
 
-- One item per repository (MVP).
+- One item per `catalog-info.yaml`. A repository has one at its root and, for monorepos or sample repositories, may have one per module folder (e.g. `policy-service/catalog-info.yaml`).
 - `apiVersion` must be `catalog/v1`; unknown keys are rejected so typos surface early.
-- `repoUrl` is **not** set in the YAML: the ingestor always uses the repository's GitHub URL.
+- `repoUrl` is **not** set in the YAML: the ingestor derives it (the repository's GitHub URL for the root file; the folder's URL for nested files, see 8.2).
+- `stack` follows the rules in section 5.
 - Same validation rules as `POST /api/items`.
 
 ### 8.2 Ingestor (`scripts/ingest.js`, `npm run ingest`)
@@ -164,15 +176,15 @@ tags: [validacion, afip]   # optional
    - With `GITHUB_TOKEN`: authenticated listing, includes private repositories the token can read.
    - Without token: public repositories only (60 requests/hour limit — enough for a demo).
    - Skip forks.
-2. **Read:** fetch `catalog-info.yaml` from the default branch. `404` → repository is reported as **uncataloged**.
-3. **Validate:** parse YAML (no custom tags / no code execution) and validate with the shared rules. Invalid → reported with the error message, nothing written.
-4. **Map:** archived repositories are forced to `DEPRECATED`. `repoUrl` = repository URL, `source` = `GIT`, `sourceRepo` = `owner/repo`.
+2. **Find and read:** for each repository, get the tree of the default branch (`GET /repos/{owner}/{repo}/git/trees/{default_branch}?recursive=1`) and collect the blobs named `catalog-info.yaml` at the root or in any folder. Paths under `node_modules/` or `dist/` are skipped. At most 100 files per repository are read; if there are more, or the API reports the tree as truncated, the repository is listed in the report as partially read. Each file is fetched through the contents API (path URL-encoded). A repository with no such file (including an empty repository: tree `409`/`404`) is reported as **uncataloged**, never as a fatal error.
+3. **Validate:** parse each YAML (no custom tags / no code execution) and validate with the shared rules. Invalid → reported with the error message, nothing written for that file; the other files of the same repository are still processed.
+4. **Map:** archived repositories force all their items to `DEPRECATED`. `source` = `GIT`. The source key (`sourceRepo`) is `owner/repo` for the root file and `owner/repo:<dir path>` for nested ones. `repoUrl` is the repository URL for the root file and `<html_url>/tree/<default_branch>/<dir>` (path segments URL-encoded) for nested ones.
 5. **Upsert:** `INSERT ... ON CONFLICT (source_repo) DO UPDATE`; `last_synced_at = now()` always; `last_reviewed_at = now()` only when content changed.
-6. **Report:** print a summary — created, updated, unchanged, invalid (with reasons), uncataloged (list) — and exit `0`. Exit `1` only on fatal errors (database or GitHub unreachable, auth failure).
+6. **Report:** print a summary — repositories reviewed, files found, created, updated, unchanged, invalid (with reasons), uncataloged (repositories with zero YAML files), partially read repositories, orphaned — listing items by their source key, and exit `0`. Exit `1` only on fatal errors (database or GitHub unreachable, auth failure).
 
 Rules:
 - `--dry-run` flag: does everything except writing to the database.
-- Git items whose repository no longer has a YAML are left unchanged and listed as **orphaned** in the report (no automatic deletion).
+- Git items whose source key no longer has a valid YAML are left unchanged and listed as **orphaned** in the report (no automatic deletion). Detection works per source key, over the existing git items whose key starts with `owner/`.
 - The token is never logged. Requests use a 15 s timeout.
 - The GitHub access lives in its own module (`scripts/sources/github.js`) so a GitLab source can be added later without touching the rest.
 
@@ -182,7 +194,7 @@ Location: `.claude/skills/catalog-item/SKILL.md` (shipped in this repo; copy it 
 
 The skill instructs Claude Code to:
 1. Read the current repository (README, `package.json` / `pom.xml`, main entry points).
-2. Draft `catalog-info.yaml` following section 8.1, with the description written as "what it does and when to use it" and a short, real usage example.
+2. Draft `catalog-info.yaml` following section 8.1, with the description written as "what it does and when to use it" and a short, real usage example. Detect the `stack` from the manifests (`pom.xml` `java.version` / `maven.compiler.release` / Spring Boot parent, `package.json` `@angular/core`, normalizing `1.8` to `8`) and quote the versions. In monorepos, propose one `catalog-info.yaml` per module folder.
 3. **Never** include secrets, credentials, internal hostnames, IPs, or client-confidential data.
 4. Show the file to the developer for review before writing it; never commit or push.
 
@@ -192,15 +204,16 @@ This repository ships its own `catalog-info.yaml` (the catalog catalogs itself).
 
 Single page with:
 1. **Search bar** + type filter; results update on input (debounced ~300 ms).
-2. **Results list** as cards: name, type badge, status (deprecated visibly marked), description, owner, links, tags.
-3. **Card detail** (expand): install and usage example in a monospace block; for git items, the source repository and last sync time.
+2. **Results list** as cards: name, type badge, stack badges, status (deprecated visibly marked), description, owner, links, tags.
+3. **Card detail** (expand): the stack (`Stack: Java 21 · Spring Boot 3.2.5`), install and usage example in a monospace block; for git items, the source key as is ("Sincronizado desde owner/repo:dir") and last sync time.
 4. **Origin badge:** git items show a "desde git" badge.
-5. **Empty state:** invites the user to add the missing item.
-6. **Create form:** fields from the data model; on success the list refreshes, filters reset, and the new item is shown expanded; on error the API message is shown.
+5. **Stack badges** (not interactive): language badge (`Java 21`, `TypeScript 5.4`) and framework badge (`Spring Boot 3.2` as major.minor; `Angular 18` as major for frameworks versioned by major). Java language version below 17 → warning-style badge with title "Versión de Java legacy"; Java 17 or later → success-style badge; everything else neutral.
+6. **Empty state:** invites the user to add the missing item.
+7. **Create form:** fields from the data model, except `stack` (it comes from git, not from the form); on success the list refreshes, filters reset, and the new item is shown expanded; on error the API message is shown.
 
 User-provided content is rendered as text (no `innerHTML` with raw data).
 
-**UI language:** all user-facing copy is in neutral Spanish (e.g. "Catálogo del equipo", "Agregar ítem", "Buscar por nombre, etiqueta o responsable", type labels Servicio / Librería / Herramienta / Funcionalidad, badges "deprecado", "listo para agentes", "desde git"). Code, identifiers, API fields, and enum values stay in English.
+**UI language:** all user-facing copy is in neutral Spanish (e.g. "Catálogo de Software" with subtitle "Servicios, librerías y aplicaciones reutilizables", "Agregar ítem", "Buscar por nombre, etiqueta, responsable o stack", type labels Servicio / Librería / Herramienta / Funcionalidad, badges "deprecado", "listo para agentes", "desde git"). Code, identifiers, API fields, and enum values stay in English.
 
 **Look and feel:** clean, flat, card-based layout; color-coded type badges; "listo para agentes" badge when an item has `install` and `usageExample`; deprecated items dimmed and struck through; light and dark mode support.
 
@@ -223,7 +236,11 @@ User-provided content is rendered as text (no `innerHTML` with raw data).
 - [ ] Running it again without changes reports all items as unchanged and creates no duplicates.
 - [ ] Editing a YAML and re-running updates the item and its `last_reviewed_at`.
 - [ ] A repository with an invalid YAML is reported with the reason and nothing is written for it.
-- [ ] Repositories without YAML are listed as uncataloged.
+- [ ] Repositories without YAML are listed as uncataloged (an empty repository included).
+- [ ] A repository with several `catalog-info.yaml` files (monorepo) yields one item per file, keyed `owner/repo` (root) or `owner/repo:<dir>` (nested), with `repoUrl` pointing to the folder; files under `node_modules/` or `dist/` are ignored.
+- [ ] Removing one nested YAML and re-running lists only that source key as orphaned.
+- [ ] A `stack` in the YAML is stored, shown as badges (Java below 17 highlighted as legacy) and changes `last_reviewed_at` when edited.
+- [ ] `q=java 8` and `language=java&languageVersion=8` return only Java 8 items; an invalid `language` returns `400`.
 - [ ] `--dry-run` writes nothing.
 - [ ] Ingested items show the "desde git" badge in the UI and are found by the MCP tools.
 - [ ] Existing databases created by the previous schema migrate without losing data.
@@ -233,6 +250,7 @@ User-provided content is rendered as text (no `innerHTML` with raw data).
 - [ ] Asking Claude Code "I need to integrate with <item>" makes the agent call `search_catalog` and answer with the item's name, owner, and repo.
 - [ ] Asking for details makes the agent call `get_item` and return install + usage example.
 - [ ] An item created from the web UI is found by the agent without restarting anything.
+- [ ] Asking "which services still run on Java 8" makes the agent call `search_catalog` with `language=java`, `languageVersion=8`; calling it with no query and no filter returns a tool error.
 - [ ] With the API unreachable, the tool returns an error message and the MCP server keeps running.
 
 ## 12. Demo script
@@ -249,10 +267,10 @@ User-provided content is rendered as text (no `innerHTML` with raw data).
 ai-day-flock-challenge/
 ├── server.js                     # Express app: routes, static files
 ├── db.js                         # pg Pool + schema bootstrap/migration
-├── lib/validation.js             # shared item validation (API + ingestor)
+├── lib/validation.js             # shared item + stack validation (API + ingestor)
 ├── mcp/server.js                 # MCP stdio server (adapter over REST API)
 ├── scripts/ingest.js             # git ingestor (npm run ingest)
-├── scripts/sources/github.js     # GitHub source adapter
+├── scripts/sources/github.js     # GitHub source adapter (repos, tree, nested catalog-info.yaml)
 ├── .claude/skills/catalog-item/SKILL.md
 ├── catalog-info.yaml             # this repo's own catalog entry
 ├── seed.sql
@@ -267,6 +285,7 @@ ai-day-flock-challenge/
 - Railway trial: one-time US$5 credit for 30 days; app + Postgres running continuously consume it. Keeping it online afterwards requires the Hobby plan or moving the database (e.g. Neon). Keep "App Sleeping" disabled for the demo.
 - Link and API are public: do not store secrets, credentials, internal hostnames, or client-confidential information. **Do not ingest client repositories into the public deploy.**
 - The app must listen on `process.env.PORT`.
+- Each repository costs one tree request plus one request per `catalog-info.yaml`; monorepos consume the unauthenticated limit quickly.
 - Unauthenticated GitHub API: 60 requests/hour; use `GITHUB_TOKEN` (fine-grained, read-only "Contents" and "Metadata") beyond a few repositories.
 
 ## 15. Path to production (client environment)
@@ -282,4 +301,4 @@ ai-day-flock-challenge/
 1. Semantic search with embeddings in `pgvector`.
 2. "Preguntar" box in the UI: natural-language answers grounded on catalog items.
 3. Freshness: reminders to owners when `last_reviewed_at` is older than 90 days.
-4. Multiple items per repository (monorepos).
+4. Stack inventory report (e.g. all services per Java version) and upgrade-deadline alerts for legacy runtimes.

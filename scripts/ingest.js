@@ -1,14 +1,15 @@
-// Git ingestor: reads catalog-info.yaml from the repositories of GITHUB_OWNER and upserts them as GIT items.
+// Git ingestor: reads every catalog-info.yaml (root and nested) from the repositories of GITHUB_OWNER
+// and upserts them as GIT items.
 // Usage: npm run ingest [-- --dry-run]
 // Env:   DATABASE_URL, GITHUB_OWNER (required); GITHUB_TOKEN, GITHUB_API_URL (optional).
 import YAML from 'yaml';
 import { pool, initSchema } from '../db.js';
 import { ValidationError, validateItem } from '../lib/validation.js';
-import { GitHubError, listRepos, getCatalogFile } from './sources/github.js';
+import { GitHubError, listRepos, getCatalogFiles, directoryUrl } from './sources/github.js';
 
 const API_VERSION = 'catalog/v1';
 const ALLOWED_KEYS = [
-  'apiVersion', 'name', 'type', 'description', 'owner', 'status', 'docsUrl', 'install', 'usageExample', 'tags',
+  'apiVersion', 'name', 'type', 'description', 'owner', 'status', 'docsUrl', 'install', 'usageExample', 'tags', 'stack',
 ];
 
 const dryRun = process.argv.includes('--dry-run');
@@ -44,12 +45,15 @@ function parseManifest(text) {
 
 // Used only by --dry-run to classify updated vs unchanged (the real run lets Postgres decide).
 const CONTENT_FIELDS = ['name', 'type', 'description', 'owner', 'status', 'repo_url', 'docs_url', 'install', 'usage_example'];
+const canonicalStack = (stack) => JSON.stringify(stack ? Object.fromEntries(Object.entries(stack).sort()) : null);
 function sameContent(row, item) {
   const mapped = {
     name: item.name, type: item.type, description: item.description, owner: item.owner, status: item.status,
     repo_url: item.repoUrl, docs_url: item.docsUrl, install: item.install, usage_example: item.usageExample,
   };
-  return CONTENT_FIELDS.every((f) => row[f] === mapped[f]) && JSON.stringify(row.tags) === JSON.stringify(item.tags);
+  return CONTENT_FIELDS.every((f) => row[f] === mapped[f])
+    && JSON.stringify(row.tags) === JSON.stringify(item.tags)
+    && canonicalStack(row.stack) === canonicalStack(item.stack);
 }
 
 async function loadExistingGitItems() {
@@ -65,26 +69,28 @@ async function loadExistingGitItems() {
 
 // now() is fixed per statement, so `last_reviewed_at = now()` in RETURNING is true only when the row
 // was just inserted or its content changed; that is how created / updated / unchanged are told apart.
-async function upsert(repo, item) {
+async function upsert(sourceKey, item) {
   const { rows } = await pool.query(
     `INSERT INTO items (name, type, description, owner, status, repo_url, docs_url, install, usage_example, tags,
-                        source, source_repo, last_synced_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'GIT', $11, now())
+                        stack, source, source_repo, last_synced_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, 'GIT', $12, now())
      ON CONFLICT (source_repo) DO UPDATE SET
        name = EXCLUDED.name, type = EXCLUDED.type, description = EXCLUDED.description, owner = EXCLUDED.owner,
        status = EXCLUDED.status, repo_url = EXCLUDED.repo_url, docs_url = EXCLUDED.docs_url,
        install = EXCLUDED.install, usage_example = EXCLUDED.usage_example, tags = EXCLUDED.tags,
+       stack = EXCLUDED.stack,
        last_synced_at = now(),
        last_reviewed_at = CASE
          WHEN (items.name, items.type, items.description, items.owner, items.status, items.repo_url,
-               items.docs_url, items.install, items.usage_example, items.tags)
+               items.docs_url, items.install, items.usage_example, items.tags, items.stack)
               IS DISTINCT FROM
               (EXCLUDED.name, EXCLUDED.type, EXCLUDED.description, EXCLUDED.owner, EXCLUDED.status,
-               EXCLUDED.repo_url, EXCLUDED.docs_url, EXCLUDED.install, EXCLUDED.usage_example, EXCLUDED.tags)
+               EXCLUDED.repo_url, EXCLUDED.docs_url, EXCLUDED.install, EXCLUDED.usage_example, EXCLUDED.tags,
+               EXCLUDED.stack)
          THEN now() ELSE items.last_reviewed_at END
      RETURNING (xmax = 0) AS inserted, (last_reviewed_at = now()) AS changed`,
     [item.name, item.type, item.description, item.owner, item.status, item.repoUrl, item.docsUrl, item.install,
-      item.usageExample, item.tags, repo.fullName],
+      item.usageExample, item.tags, item.stack ? JSON.stringify(item.stack) : null, sourceKey],
   );
   return rows[0];
 }
@@ -96,6 +102,7 @@ function printReport(r) {
   };
   console.log(`\n=== Resumen de ingesta${dryRun ? ' (simulacro: no se escribió nada)' : ''} ===`);
   console.log(`Repositorios revisados: ${r.total}`);
+  console.log(`Archivos catalog-info.yaml encontrados: ${r.files}`);
   console.log(`${dryRun ? 'Se crearían' : 'Creados'}: ${r.created.length}`);
   console.log(`${dryRun ? 'Se actualizarían' : 'Actualizados'}: ${r.updated.length}`);
   console.log(`Sin cambios: ${r.unchanged.length}`);
@@ -106,6 +113,7 @@ function printReport(r) {
   if (r.updated.length) list(dryRun ? 'Se actualizarían' : 'Actualizados', r.updated, (x) => x);
   if (r.invalid.length) list('Inválidos (no se escribió nada)', r.invalid, (x) => `${x.repo}: ${x.reason}`);
   if (r.uncataloged.length) list('Sin catalogar (falta catalog-info.yaml)', r.uncataloged, (x) => x);
+  if (r.partial.length) list('Lectura parcial (puede faltar algún catalog-info.yaml)', r.partial, (x) => `${x.repo}: ${x.reason}`);
   if (r.orphaned.length) {
     list('Huérfanos (en el catálogo, sin YAML válido en esta corrida; no se eliminan)', r.orphaned, (x) => x);
   }
@@ -126,13 +134,15 @@ async function main() {
   const existingByRepo = new Map(existing.map((row) => [row.source_repo.toLowerCase(), row]));
 
   const repos = await listRepos(owner);
-  const report = { total: repos.length, created: [], updated: [], unchanged: [], invalid: [], uncataloged: [], orphaned: [] };
+  const report = {
+    total: repos.length, files: 0, created: [], updated: [], unchanged: [], invalid: [], uncataloged: [], partial: [], orphaned: [],
+  };
   const valid = new Set();
 
   for (const repo of repos) {
-    let text;
+    let found;
     try {
-      text = await getCatalogFile(repo.fullName);
+      found = await getCatalogFiles(repo);
     } catch (err) {
       if (err instanceof GitHubError && !err.fatal) {
         report.invalid.push({ repo: repo.fullName, reason: err.message });
@@ -140,33 +150,44 @@ async function main() {
       }
       throw err;
     }
-    if (text === null) {
+    if (found.truncated) report.partial.push({ repo: repo.fullName, reason: found.truncated });
+    if (found.files.length === 0) {
       report.uncataloged.push(repo.fullName);
       continue;
     }
 
-    let item;
-    try {
-      item = parseManifest(text);
-    } catch (err) {
-      if (!(err instanceof ValidationError)) throw err;
-      report.invalid.push({ repo: repo.fullName, reason: err.message });
-      continue;
-    }
-    item.repoUrl = repo.htmlUrl;
-    if (repo.archived) item.status = 'DEPRECATED';
-    valid.add(repo.fullName.toLowerCase());
+    for (const file of found.files) {
+      report.files += 1;
+      // Identity of the item: "owner/repo" for the root file, "owner/repo:dir" for nested ones.
+      const key = file.dir ? `${repo.fullName}:${file.dir}` : repo.fullName;
+      if (file.error) {
+        report.invalid.push({ repo: key, reason: file.error });
+        continue;
+      }
 
-    if (dryRun) {
-      const row = existingByRepo.get(repo.fullName.toLowerCase());
-      if (!row) report.created.push(repo.fullName);
-      else if (sameContent(row, item)) report.unchanged.push(repo.fullName);
-      else report.updated.push(repo.fullName);
-    } else {
-      const result = await upsert(repo, item);
-      if (result.inserted) report.created.push(repo.fullName);
-      else if (result.changed) report.updated.push(repo.fullName);
-      else report.unchanged.push(repo.fullName);
+      let item;
+      try {
+        item = parseManifest(file.text);
+      } catch (err) {
+        if (!(err instanceof ValidationError)) throw err;
+        report.invalid.push({ repo: key, reason: err.message });
+        continue;
+      }
+      item.repoUrl = directoryUrl(repo, file.dir);
+      if (repo.archived) item.status = 'DEPRECATED';
+      valid.add(key.toLowerCase());
+
+      if (dryRun) {
+        const row = existingByRepo.get(key.toLowerCase());
+        if (!row) report.created.push(key);
+        else if (sameContent(row, item)) report.unchanged.push(key);
+        else report.updated.push(key);
+      } else {
+        const result = await upsert(key, item);
+        if (result.inserted) report.created.push(key);
+        else if (result.changed) report.updated.push(key);
+        else report.unchanged.push(key);
+      }
     }
   }
 

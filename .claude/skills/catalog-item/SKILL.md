@@ -17,7 +17,7 @@ Draft `catalog-info.yaml` at the repository root so the catalog ingestor can lis
 
 ## Rules
 
-- Allowed keys: `apiVersion`, `name`, `type`, `description`, `owner`, `status`, `docsUrl`, `install`, `usageExample`, `tags`. Unknown keys are rejected by the ingestor. Never add `repoUrl` (it comes from the repository).
+- Allowed keys: `apiVersion`, `name`, `type`, `description`, `owner`, `status`, `docsUrl`, `install`, `usageExample`, `tags`, `stack`. Unknown keys are rejected by the ingestor. Never add `repoUrl` (it comes from the repository).
 - `apiVersion` is always `catalog/v1`.
 - `description` (max 1000 chars): write it in Spanish, explaining what it does and when to use it, so someone can decide not to rebuild it. No marketing language.
 - `usageExample` (max 2000 chars): a short, real snippet taken from the README or the code. Never invent APIs, function names or parameters. If no reliable example exists, omit the key.
@@ -25,6 +25,12 @@ Draft `catalog-info.yaml` at the repository root so the catalog ingestor can lis
 - `owner`: use CODEOWNERS or README if evident; otherwise ask the developer. Do not guess.
 - `status`: omit unless the repo is clearly deprecated (`DEPRECATED`); archived repos are marked automatically.
 - `tags`: up to 20 short lowercase words (domain, technology, business concept).
+- `stack` (optional object, every key optional): `language`, `languageVersion`, `framework`, `frameworkVersion`. `language` and `framework` are lowercase slugs (`java`, `typescript`, `spring-boot`, `angular`); versions are strings and MUST be quoted (`"21"`, `"3.2.5"`), otherwise YAML reads them as numbers and the ingestor rejects them. Only fill what you can verify from the repo; omit `stack` if unsure. How to detect it:
+  - Java: `pom.xml` `<java.version>`, `<maven.compiler.release>` / `<maven.compiler.source>`, or `<release>` in maven-compiler-plugin; `build.gradle*` `sourceCompatibility` / `JavaLanguageVersion`. Normalize old notation: `1.8` becomes `"8"`.
+  - Spring Boot: the `spring-boot-starter-parent` version in `pom.xml` (or the Spring Boot plugin/BOM version in Gradle) gives `framework: spring-boot` and `frameworkVersion`.
+  - Angular: `@angular/core` in `package.json` gives `framework: angular` and `frameworkVersion` (strip `^`/`~`); a `typescript` dependency gives `language: typescript` and `languageVersion`.
+  - Other Node projects: `language: javascript` (or `typescript`), `framework` from the main dependency (e.g. `express`), and the `engines.node` hint only if it is explicit.
+- Monorepos / repositories with several modules: the ingestor reads one `catalog-info.yaml` per folder. Draft one at the repository root only if the repo as a whole is something reusable; for independent modules (services, libraries) propose a `catalog-info.yaml` inside each module folder, each with its own `name`, `description`, and `stack`. Show every draft before writing any of them.
 - NEVER include secrets, credentials, tokens, internal hostnames, IP addresses, internal URLs or client-confidential data, even if they appear in the code or README. Leave them out and tell the developer you omitted them.
 - Only keep `docsUrl` if it is a documentation link you saw in the repo and it is safe to expose.
 - The catalog may be public: write nothing you would not put on a public page.
@@ -46,4 +52,9 @@ usageExample: |            # optional
   import { isValidCuit } from '@flock/cuit';
   isValidCuit('20-12345678-9');
 tags: [validacion, afip]   # optional
+stack:                     # optional, every key optional; versions always quoted
+  language: java           # lowercase
+  languageVersion: "21"
+  framework: spring-boot
+  frameworkVersion: "3.2.5"
 ```

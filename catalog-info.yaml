@@ -1,5 +1,5 @@
 apiVersion: catalog/v1
-name: Catálogo del equipo
+name: Catálogo de Software
 type: TOOL
 description: >
   Catálogo interno de servicios, librerías, herramientas y funcionalidades del equipo,
@@ -10,3 +10,7 @@ install: git clone https://github.com/pgimenez-flockit/ai-day-flock-challenge.gi
 usageExample: |
   claude mcp add catalog -e CATALOG_API_URL=https://<app>.up.railway.app -- node <ruta-absoluta>/mcp/server.js
 tags: [catalogo, mcp, agentes, descubrimiento]
+stack:
+  language: javascript
+  framework: express
+  frameworkVersion: "5.3.0"
